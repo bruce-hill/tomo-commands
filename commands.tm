@@ -2,9 +2,6 @@
 
 use ./commands.c
 
-extern run_command : func(exe:Text, args:[Text], env:{Text=Text}, input:[Byte]?, output:&[Byte]?, error:&[Byte]? -> Int32)
-extern command_by_line : func(exe:Text, args:[Text], env:{Text=Text} -> func(->Text?)?)
-
 enum ExitType(Exited(status:Int32), Signaled(signal:Int32), Failed)
     func succeeded(e:ExitType -> Bool)
         when e is Exited(status) return (status == 0)
@@ -25,7 +22,7 @@ struct ProgramResult(output:[Byte], errors:[Byte], exit_type:ExitType)
     func output_text(r:ProgramResult, trim_newline=yes -> Text?)
         when r.exit_type is Exited(status)
             if status == 0
-                if text := Text.from_bytes(r.output)
+                if text := Text(r.output)
                     if trim_newline
                         text = text.without_suffix("\n")
                     return text
@@ -35,7 +32,7 @@ struct ProgramResult(output:[Byte], errors:[Byte], exit_type:ExitType)
     func error_text(r:ProgramResult -> Text?)
         when r.exit_type is Exited(status)
             if status == 0
-                return Text.from_bytes(r.errors)
+                return Text(r.errors)
         else return none
         return none
 
@@ -51,28 +48,32 @@ struct Command(command:Text, args:[Text]=[], env:{Text=Text}={})
 
     func result(command:Command, input="", input_bytes:[Byte]=[] -> ProgramResult)
         if input.length > 0
-            (&input_bytes).insert_all(input.bytes())
+            (&input_bytes).insert_all(input.utf8())
 
         output : [Byte]
         errors : [Byte]
-        status := run_command(command.command, command.args, command.env, input_bytes, &output, &errors)
+        status := C_code:Int32`
+            run_command(@(command.command), @(command.args), @(command.env), @input_bytes, &@output, &@errors)
+        `
 
-        if C_code:Bool(WIFEXITED(@status))
-            return ProgramResult(output, errors, ExitType.Exited(C_code:Int32(WEXITSTATUS(@status))))
+        if C_code:Bool`WIFEXITED(@status)`
+            return ProgramResult(output, errors, ExitType.Exited(C_code:Int32`WEXITSTATUS(@status)`))
 
-        if C_code:Bool(WIFSIGNALED(@status))
-            return ProgramResult(output, errors, ExitType.Signaled(C_code:Int32(WTERMSIG(@status))))
+        if C_code:Bool`WIFSIGNALED(@status)`
+            return ProgramResult(output, errors, ExitType.Signaled(C_code:Int32`WTERMSIG(@status)`))
 
         return ProgramResult(output, errors, ExitType.Failed)
 
     func run(command:Command, -> ExitType)
-        status := run_command(command.command, command.args, command.env, none, none, none)
+        status := C_code:Int32`
+            run_command(@(command.command), @(command.args), @(command.env), NONE_LIST, NULL, NULL)
+        `
 
-        if C_code:Bool(WIFEXITED(@status))
-            return ExitType.Exited(C_code:Int32(WEXITSTATUS(@status)))
+        if C_code:Bool`WIFEXITED(@status)`
+            return ExitType.Exited(C_code:Int32`WEXITSTATUS(@status)`)
 
-        if C_code:Bool(WIFSIGNALED(@status))
-            return ExitType.Signaled(C_code:Int32(WTERMSIG(@status)))
+        if C_code:Bool`WIFSIGNALED(@status)`
+            return ExitType.Signaled(C_code:Int32`WTERMSIG(@status)`)
 
         return ExitType.Failed
 
@@ -87,4 +88,9 @@ struct Command(command:Text, args:[Text]=[], env:{Text=Text}={})
         else return none
 
     func by_line(command:Command -> func(->Text?)?)
-        return command_by_line(command.command, command.args, command.env)
+        return C_code:func(->Text?)?`
+            command_by_line(@(command.command), @(command.args), @(command.env))
+        `
+
+func main(cmd:Command)
+    >> cmd.run()
