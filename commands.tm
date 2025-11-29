@@ -22,7 +22,7 @@ struct ProgramResult(output:[Byte], errors:[Byte], exit_type:ExitType)
     func output_text(r:ProgramResult, trim_newline=yes -> Text?)
         when r.exit_type is Exited(status)
             if status == 0
-                if text := Text(r.output)
+                if text := Text.from_utf8(r.output)
                     if trim_newline
                         text = text.without_suffix("\n")
                     return text
@@ -32,7 +32,7 @@ struct ProgramResult(output:[Byte], errors:[Byte], exit_type:ExitType)
     func error_text(r:ProgramResult -> Text?)
         when r.exit_type is Exited(status)
             if status == 0
-                return Text(r.errors)
+                return Text.from_utf8(r.errors)
         else return none
         return none
 
@@ -93,4 +93,4 @@ struct Command(command:Text, args:[Text]=[], env:{Text=Text}={})
         `
 
 func main(cmd:Command)
-    >> cmd.run()
+    >> cmd.get_output()

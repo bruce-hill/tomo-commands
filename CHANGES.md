@@ -1,5 +1,9 @@
 # Version History
 
+## v2.1
+
+Bugfix for converting bytes to text.
+
 ## v2.0
 
 Update to new Tomo syntax and add a `main()` function.
